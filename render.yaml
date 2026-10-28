@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: agrimarket
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agrimarket-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        sync: false
+
+databases:
+  - name: agrimarket-db
+    plan: free
+    region: oregon
+    databaseName: agrimarket
+    user: agrimarket
+    postgresMajorVersion: 16

@@ -15,7 +15,10 @@ from sqlalchemy import (Boolean, Column, Date, DateTime, Float, ForeignKey, Inte
 from sqlalchemy.orm import Session, declarative_base, relationship, sessionmaker
 
 SECRET = os.environ["SECRET_KEY"]
-engine = create_engine(os.environ["DATABASE_URL"], pool_pre_ping=True)
+DATABASE_URL = os.environ["DATABASE_URL"]
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 Session_ = sessionmaker(engine)
 Base = declarative_base()
 UNITS = "kg|lb|bulto|canastilla|unidad"
