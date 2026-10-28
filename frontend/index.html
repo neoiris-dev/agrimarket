@@ -1,0 +1,99 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AgriMarket · Productos agrícolas locales</title>
+<style>
+:root{--g:#2e7d32;--g2:#e8f5e9;--t:#1b1f1c;--m:#5f6b62;--b:#dfe5df;--r:#c62828}
+*{box-sizing:border-box}body{margin:0;font:16px/1.5 system-ui,-apple-system,sans-serif;color:var(--t);background:#f6f8f6}
+header{background:var(--g);color:#fff;display:flex;gap:12px;align-items:center;padding:10px 16px;flex-wrap:wrap}
+header a{color:#fff;text-decoration:none;font-weight:500}header b{font-size:1.2rem;margin-right:auto}
+nav{display:flex;gap:14px;flex-wrap:wrap}main{max-width:960px;margin:auto;padding:16px}
+.card{display:block;background:#fff;border:1px solid var(--b);border-radius:12px;padding:14px;margin-bottom:12px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}.grid .card{margin:0}
+input,select,textarea{font:inherit;padding:10px;border:1px solid var(--b);border-radius:8px;width:100%;margin:4px 0 10px}
+button,.btn{font:inherit;background:var(--g);color:#fff;border:0;cursor:pointer;padding:10px 16px;border-radius:8px;text-decoration:none;display:inline-block;margin:2px 0}
+button:disabled{opacity:.5;cursor:not-allowed}button.s{background:#fff;color:var(--g);border:1px solid var(--g)}button.d{background:var(--r)}
+:focus-visible{outline:3px solid #1565c0;outline-offset:2px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.p{width:100%;height:140px;object-fit:cover;border-radius:8px;background:var(--g2);display:grid;place-items:center;font-size:2rem}
+.tag{background:var(--g2);color:var(--g);border-radius:99px;padding:2px 10px;font-size:.85rem}
+.err{color:var(--r)}label{font-size:.9rem;color:var(--m)}
+</style></head><body>
+<header><b>🌱 AgriMarket</b><nav id="nav"></nav></header><main id="app"></main>
+<script>
+const $=s=>document.querySelector(s),app=$("#app");
+let U=JSON.parse(localStorage.u||"null"),T=localStorage.t||"",F={q:"",c:"",m:"",page:1};
+const ST={pending:"Pendiente",accepted:"Aceptada",rejected:"Rechazada",delivered:"Entregada"};
+const UN=["kg","lb","bulto","canastilla","unidad"],MUN=["Facatativá","Subachoque","Madrid","Mosquera","Funza","Bogotá (occidente)"];
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money=n=>"$"+Number(n).toLocaleString("es-CO"),msg=e=>`<p class="err" role="alert">${esc(e.message)}</p>`;
+const opts=a=>a.map(x=>`<option>${x}</option>`).join("");
+async function api(p,m="GET",b){
+ const r=await fetch("/api"+p,{method:m,headers:{"Content-Type":"application/json",...(T&&{Authorization:"Bearer "+T})},body:b&&JSON.stringify(b)});
+ const d=await r.json().catch(()=>({}));
+ if(r.status==401&&T){localStorage.clear();T="";U=null}
+ if(!r.ok)throw new Error(Array.isArray(d.detail)?d.detail[0].loc.at(-1)+": "+d.detail[0].msg:d.detail||"Error inesperado");
+ return d}
+function nav(){
+ $("#nav").innerHTML='<a href="#/">Catálogo</a>'+(U?`<a href="#/${U.role=="consumer"?"mine":"panel"}">${U.role=="consumer"?"Mis solicitudes":"Panel"}</a><a href="#" id="out">Salir (${esc(U.name.split(" ")[0])})</a>`:'<a href="#/login">Ingresar</a><a href="#/register">Registrarme</a>');
+ if(U)$("#out").onclick=e=>{e.preventDefault();U=null;T="";localStorage.clear();location.hash="#/";route()}}
+const card=p=>`<a class="card" href="#/p/${p.id}" style="text-decoration:none;color:inherit">${p.image?`<img class="p" src="${p.image}" alt="${esc(p.name)}">`:'<div class="p">🥬</div>'}<h3>${esc(p.name)}</h3><div><b>${money(p.price)}</b> / ${p.unit}</div><div><span class="tag">${esc(p.category)}</span> ${esc(p.municipality||"")}</div></a>`;
+async function catalog(){
+ const cats=(await api("/categories")).filter(c=>c.active);
+ app.innerHTML=`<input id="q" placeholder="Buscar producto..." aria-label="Buscar" value="${esc(F.q)}"><div class="chips"><button data-c="" class="${F.c?"s":""}">Todas</button>${cats.map(c=>`<button data-c="${c.id}" class="${F.c==c.id?"":"s"}">${esc(c.name)}</button>`).join("")}</div><select id="m" aria-label="Municipio"><option value="">Todos los municipios</option>${MUN.map(m=>`<option ${F.m==m?"selected":""}>${m}</option>`).join("")}</select><div id="list"></div>`;
+ $("#q").oninput=e=>{F.q=e.target.value;F.page=1;load()};$("#m").onchange=e=>{F.m=e.target.value;F.page=1;load()};
+ document.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{F.c=b.dataset.c;F.page=1;catalog()});load()}
+async function load(){
+ const p=new URLSearchParams({page:F.page});F.q&&p.set("q",F.q);F.c&&p.set("category_id",F.c);F.m&&p.set("municipality",F.m);
+ const d=await api("/products?"+p);
+ $("#list").innerHTML=d.items.length?`<div class="grid">${d.items.map(card).join("")}</div><p>Página ${d.page} de ${d.pages} <button class="s" id="pv" ${d.page<2?"disabled":""}>‹</button> <button class="s" id="nx" ${d.page>=d.pages?"disabled":""}>›</button></p>`:'<p>No hay productos con esos filtros. <a href="#/" id="all">Ver todos</a></p>';
+ if($("#pv")){$("#pv").onclick=()=>{F.page--;load()};$("#nx").onclick=()=>{F.page++;load()}}
+ if($("#all"))$("#all").onclick=e=>{e.preventDefault();F={q:"",c:"",m:"",page:1};catalog()}}
+async function detail(id){
+ const p=await api("/products/"+id);
+ app.innerHTML=`<div class="card">${p.image?`<img class="p" style="height:260px" src="${p.image}" alt="${esc(p.name)}">`:'<div class="p">🥬</div>'}<h2>${esc(p.name)}</h2><p>${esc(p.description||"")}</p><p><b>${money(p.price)}</b> / ${p.unit} · Disponible: ${p.stock} ${p.unit}</p><p>Finca ${esc(p.farm)} · ${esc(p.municipality)} · ${esc(p.producer)}</p></div>`+
+ (U&&U.role=="consumer"?`<form class="card" id="f"><h3>Solicitar compra</h3><label>Cantidad (${p.unit})</label><input name="quantity" type="number" min="0.1" step="any" required><label>Fecha deseada</label><input name="date" type="date" required><label>Punto de entrega</label><input name="address" required><p id="tot"></p><button>Enviar solicitud</button><div id="e"></div></form>`:U?"":'<a class="btn" href="#/login" onclick="sessionStorage.back=location.hash">Inicia sesión para solicitar</a>');
+ if(!$("#f"))return;
+ $("[name=quantity]").oninput=e=>$("#tot").textContent="Total estimado: "+money(e.target.value*p.price);
+ $("#f").onsubmit=async e=>{e.preventDefault();const b=Object.fromEntries(new FormData(e.target));b.product_id=p.id;b.quantity=+b.quantity;
+  try{await api("/requests","POST",b);alert("Solicitud enviada. Estado: Pendiente");location.hash="#/mine"}catch(x){$("#e").innerHTML=msg(x)}}}
+function auth(d){T=d.token;U=d.user;localStorage.t=T;localStorage.u=JSON.stringify(U);const b=sessionStorage.back;sessionStorage.removeItem("back");location.hash=b||(U.role=="consumer"?"#/":"#/panel");route()}
+function login(){
+ app.innerHTML='<form class="card" id="f"><h2>Ingresar</h2><label>Correo</label><input name="email" type="email" required><label>Contraseña</label><input name="password" type="password" required><button>Entrar</button><div id="e"></div></form>';
+ $("#f").onsubmit=async e=>{e.preventDefault();try{auth(await api("/auth/login","POST",Object.fromEntries(new FormData(e.target))))}catch(x){$("#e").innerHTML=msg(x)}}}
+function register(){
+ app.innerHTML=`<form class="card" id="f"><h2>Crear cuenta</h2><label>Tipo de cuenta</label><select name="role" id="r"><option value="consumer">Consumidor</option><option value="producer">Productor</option></select><label>Nombre</label><input name="name" required><label>Correo</label><input name="email" type="email" required><label>Celular (10 dígitos)</label><input name="phone" pattern="\\d{10}" required><label>Contraseña (mínimo 8)</label><input name="password" type="password" minlength="8" required><div id="pf" hidden><label>Nombre de la finca</label><input name="farm"><label>Municipio</label><select name="municipality">${opts(MUN)}</select></div><label><input type="checkbox" id="c" style="width:auto"> Autorizo el tratamiento de mis datos personales (Ley 1581 de 2012)</label><br><button id="b" disabled>Crear cuenta</button><div id="e"></div></form>`;
+ $("#r").onchange=e=>$("#pf").hidden=e.target.value!="producer";$("#c").onchange=e=>$("#b").disabled=!e.target.checked;
+ $("#f").onsubmit=async e=>{e.preventDefault();const b=Object.fromEntries(new FormData(e.target));b.consent=$("#c").checked;
+  if(b.role=="consumer"){delete b.farm;delete b.municipality}
+  try{auth(await api("/auth/register","POST",b))}catch(x){$("#e").innerHTML=msg(x)}}}
+const shrink=f=>new Promise(ok=>{const i=new Image;i.onload=()=>{const k=Math.min(1,800/Math.max(i.width,i.height)),c=document.createElement("canvas");c.width=i.width*k;c.height=i.height*k;c.getContext("2d").drawImage(i,0,0,c.width,c.height);ok(c.toDataURL("image/jpeg",.7))};i.src=URL.createObjectURL(f)});
+async function panel(){
+ if(!U||U.role=="consumer")return location.hash="#/login";
+ if(U.role=="admin")return admin();
+ const [cats,mine,recv]=await Promise.all([api("/categories"),api("/products/mine"),api("/requests/received")]);
+ app.innerHTML=`<h2>Mi panel</h2><form class="card" id="f"><h3>Publicar producto</h3><label>Nombre</label><input name="name" required><label>Categoría</label><select name="category_id">${cats.filter(c=>c.active).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select><label>Precio</label><input name="price" type="number" min="1" step="any" required><label>Unidad de venta</label><select name="unit">${opts(UN)}</select><label>Cantidad disponible</label><input name="stock" type="number" min="1" step="any" required><label>Foto (JPG/PNG, máx. 5 MB)</label><input id="img" type="file" accept="image/jpeg,image/png"><label>Descripción (opcional)</label><textarea name="description"></textarea><button>Publicar</button><div id="e"></div></form>
+ <h3>Mis productos</h3>${mine.map(p=>`<div class="card"><b>${esc(p.name)}</b> ${money(p.price)}/${p.unit} · ${p.stock} ${p.visible?"":"(oculto)"} <button class="s" data-t="${p.id}">${p.visible?"Ocultar":"Mostrar"}</button></div>`).join("")||"<p>Aún no publicas productos.</p>"}
+ <h3>Solicitudes recibidas</h3>${recv.map(r=>`<div class="card"><b>#${r.id}</b> ${esc(r.consumer)} · ${r.quantity} ${r.unit} de ${esc(r.product)} · ${r.date} · ${esc(r.address)} · 📞 ${esc(r.phone)} <span class="tag">${ST[r.status]}</span><br>${r.status=="pending"?`<button data-a="${r.id}:accepted">Aceptar</button> <button class="d" data-a="${r.id}:rejected">Rechazar</button>`:r.status=="accepted"?`<button data-a="${r.id}:delivered">Marcar entregada</button>`:""}</div>`).join("")||"<p>Sin solicitudes.</p>"}`;
+ document.querySelectorAll("[data-t]").forEach(b=>b.onclick=async()=>{await api(`/products/${b.dataset.t}/toggle`,"PATCH");panel()});
+ document.querySelectorAll("[data-a]").forEach(b=>b.onclick=async()=>{const [id,st]=b.dataset.a.split(":");let reason;
+  if(st=="rejected"&&!(reason=prompt("Motivo del rechazo")))return;
+  try{await api("/requests/"+id,"PATCH",{status:st,reason})}catch(x){alert(x.message)}panel()});
+ $("#f").onsubmit=async e=>{e.preventDefault();const b=Object.fromEntries(new FormData(e.target)),f=$("#img").files[0];
+  b.category_id=+b.category_id;b.price=+b.price;b.stock=+b.stock;
+  try{if(f){if(f.size>5e6)throw new Error("La imagen debe ser JPG o PNG de máximo 5 MB");b.image=await shrink(f)}
+   await api("/products","POST",b);panel()}catch(x){$("#e").innerHTML=msg(x)}}}
+async function mine(){
+ if(!U)return location.hash="#/login";
+ const rs=await api("/requests/mine");
+ app.innerHTML="<h2>Mis solicitudes</h2>"+(rs.map(r=>`<div class="card"><b>#${r.id}</b> ${esc(r.product)} · ${r.quantity} ${r.unit} · ${r.date} · ${money(r.total)} <span class="tag">${ST[r.status]}</span>${r.reason?`<p class="err">Motivo: ${esc(r.reason)}</p>`:""}${r.wa?`<p><a class="btn" href="${r.wa}" target="_blank" rel="noopener">Escribir por WhatsApp</a></p>`:""}</div>`).join("")||"<p>Aún no has enviado solicitudes.</p>")}
+async function admin(){
+ const [cats,us]=await Promise.all([api("/categories"),api("/admin/users")]);
+ app.innerHTML=`<h2>Administración</h2><form class="card" id="f"><h3>Nueva categoría</h3><input name="name" required><button>Crear</button><div id="e"></div></form>${cats.map(c=>`<div class="card">${esc(c.name)} <button class="s" data-k="${c.id}">${c.active?"Desactivar":"Activar"}</button></div>`).join("")}<h3>Usuarios</h3>${us.map(u=>`<div class="card">${esc(u.name)} · ${u.role} · ${esc(u.email)} ${u.role!="admin"?`<button class="${u.active?"d":"s"}" data-u="${u.id}">${u.active?"Suspender":"Reactivar"}</button>`:""}</div>`).join("")}`;
+ $("#f").onsubmit=async e=>{e.preventDefault();try{await api("/admin/categories","POST",Object.fromEntries(new FormData(e.target)));admin()}catch(x){$("#e").innerHTML=msg(x)}};
+ document.querySelectorAll("[data-k]").forEach(b=>b.onclick=async()=>{await api(`/admin/categories/${b.dataset.k}/toggle`,"PATCH");admin()});
+ document.querySelectorAll("[data-u]").forEach(b=>b.onclick=async()=>{await api(`/admin/users/${b.dataset.u}/toggle`,"PATCH");admin()})}
+async function route(){
+ nav();const h=location.hash.slice(1)||"/";
+ try{if(h=="/")await catalog();else if(h.startsWith("/p/"))await detail(h.slice(3));else if(h=="/login")login();else if(h=="/register")register();else if(h=="/panel")await panel();else if(h=="/mine")await mine();else location.hash="#/"}
+ catch(e){app.innerHTML=msg(e)}}
+addEventListener("hashchange",route);route();
+</script></body></html>
